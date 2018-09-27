@@ -1,12 +1,12 @@
 package main
 
 import (
-	"time"
 	"bufio"
+	"context"
 	"flag"
 	"fmt"
-	"context"
 	"log"
+	"time"
 
 	"github.com/nil-zhang/Course/blockchain"
 	"github.com/nil-zhang/Course/rpc"
@@ -14,15 +14,15 @@ import (
 	golog "github.com/ipfs/go-log"
 	peer "github.com/libp2p/go-libp2p-peer"
 	pstore "github.com/libp2p/go-libp2p-peerstore"
-	gologging "github.com/whyrusleeping/go-logging"
 	ma "github.com/multiformats/go-multiaddr"
 	"github.com/nil-zhang/Course/wallet"
+	gologging "github.com/whyrusleeping/go-logging"
 )
 
 func main() {
 
 	// Parse options from the command line
-	command  := flag.String("c", "", "mode[ \"chain\" or \"account\"]")
+	command := flag.String("c", "", "mode[ \"chain\" or \"account\"]")
 	listenF := flag.Int("l", 0, "wait for incoming connections[chain mode param]")
 	target := flag.String("d", "", "target peer to dial[chain mode param]")
 	suffix := flag.String("s", "", "wallet suffix [chain mode param]")
@@ -31,34 +31,33 @@ func main() {
 	seed := flag.Int64("seed", 0, "set random seed for id generation[chain mode param]")
 	flag.Parse()
 
-
 	if *command == "chain" {
 		runblockchain(listenF, target, seed, secio, suffix, initAccounts)
-	}else if *command == "account" {
+	} else if *command == "account" {
 		cli := wallet.WalletCli{}
 		cli.Run()
-	}else {
+	} else {
 		flag.Usage()
 	}
 }
 
-func runblockchain(listenF *int, target *string, seed *int64, secio *bool, suffix *string, initAccounts *string){
+func runblockchain(listenF *int, target *string, seed *int64, secio *bool, suffix *string, initAccounts *string) {
 	t := time.Now()
 	genesisBlock := blockchain.Block{}
 	defaultAccounts := make(map[string]uint64)
 
-	if *initAccounts != ""{
+	if *initAccounts != "" {
 		if wallet.ValidateAddress(*initAccounts) == false {
 			fmt.Println("Invalid address")
 			return
 		}
 		defaultAccounts[*initAccounts] = 10000
 	}
-	genesisBlock = blockchain.Block{0, t.String(), 0, blockchain.CalculateHash(genesisBlock), "", 100,nil, defaultAccounts}
+	genesisBlock = blockchain.Block{0, t.String(), 0, blockchain.CalculateHash(genesisBlock), "", 100, 1, "the genesis block", nil, defaultAccounts}
 
 	var blocks []blockchain.Block
 	blocks = append(blocks, genesisBlock)
-	blockchain.BlockchainInstance.Blocks =  blocks
+	blockchain.BlockchainInstance.Blocks = blocks
 
 	// LibP2P code uses golog to log messages. They log with different
 	// string IDs (i.e. "swarm"). We can control the verbosity level for
@@ -71,11 +70,11 @@ func runblockchain(listenF *int, target *string, seed *int64, secio *bool, suffi
 
 	if *suffix == "" {
 		log.Println("option param -s miss [you can't send transacion with this node]")
-	}else {
+	} else {
 		blockchain.WalletSuffix = *suffix
 	}
 
-	go rpc.RunHttpServer(*listenF+1)
+	go rpc.RunHttpServer(*listenF + 1)
 
 	// Make a host that listens on the given multiaddress
 	ha, err := blockchain.MakeBasicHost(*listenF, *secio, *seed)
