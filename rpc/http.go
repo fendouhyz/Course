@@ -7,13 +7,13 @@ import (
 	"net/http"
 	"encoding/json"
 
-	"Course/blockchain"
+	"github.com/nil-zhang/Course/blockchain"
 
 
 	"github.com/gorilla/mux"
 	"github.com/davecgh/go-spew/spew"
 
-	"Course/wallet"
+	"github.com/nil-zhang/Course/wallet"
 	"fmt"
 )
 

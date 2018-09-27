@@ -29,36 +29,34 @@ var WalletSuffix string
 
 // Block represents each 'item' in the blockchain
 type Block struct {
-	Index     int `json:"index"`
-	Timestamp string `json:"timestamp"`
-	Result       int `json:"result"`
-	Hash      string `json:"hash"`
-	PrevHash  string `json:"prevhash"`
-	Proof        uint64           `json:"proof"`
-	Transactions []Transaction `json:"transactions"`
-	Accounts   map[string]uint64  `json:"accounts"`
+	Index        int               `json:"index"`
+	Timestamp    string            `json:"timestamp"`
+	Result       int               `json:"result"`
+	Hash         string            `json:"hash"`
+	PrevHash     string            `json:"prevhash"`
+	Proof        uint64            `json:"proof"`
+	Transactions []Transaction     `json:"transactions"`
+	Accounts     map[string]uint64 `json:"accounts"`
 }
 
-
 type Transaction struct {
-	Amount    uint64    `json:"amount"`
+	Amount    uint64 `json:"amount"`
 	Recipient string `json:"recipient"`
 	Sender    string `json:"sender"`
 	Data      []byte `json:"data"`
 }
 
 type TxPool struct {
-	AllTx     []Transaction
+	AllTx []Transaction
 }
 
 func NewTxPool() *TxPool {
 	return &TxPool{
-		AllTx:   make([]Transaction, 0),
+		AllTx: make([]Transaction, 0),
 	}
 }
 
-
-func (p *TxPool)Clear() bool {
+func (p *TxPool) Clear() bool {
 	if len(p.AllTx) == 0 {
 		return true
 	}
@@ -82,7 +80,7 @@ func (t *Blockchain) NewTransaction(sender string, recipient string, amount uint
 	return transaction
 }
 
-func (t *Blockchain)AddTxPool(tx *Transaction) int {
+func (t *Blockchain) AddTxPool(tx *Transaction) int {
 	t.TxPool.AllTx = append(t.TxPool.AllTx, *tx)
 	return len(t.TxPool.AllTx)
 }
@@ -99,36 +97,35 @@ func (t *Blockchain) GetBalance(address string) uint64 {
 	return 0
 }
 
-
-func (t *Blockchain)PackageTx(newBlock *Block) {
+func (t *Blockchain) PackageTx(newBlock *Block) {
 	(*newBlock).Transactions = t.TxPool.AllTx
 	AccountsMap := t.LastBlock().Accounts
 	for k1, v1 := range AccountsMap {
 		fmt.Println(k1, "--", v1)
 	}
 
-	unusedTx := make([]Transaction,0)
+	unusedTx := make([]Transaction, 0)
 
-	for _, v := range t.TxPool.AllTx{
+	for _, v := range t.TxPool.AllTx {
 		if value, ok := AccountsMap[v.Sender]; ok {
-			if value < v.Amount{
+			if value < v.Amount {
 				unusedTx = append(unusedTx, v)
 				continue
 			}
-			AccountsMap[v.Sender] = value-v.Amount
+			AccountsMap[v.Sender] = value - v.Amount
 		}
 
 		if value, ok := AccountsMap[v.Recipient]; ok {
 			AccountsMap[v.Recipient] = value + v.Amount
-		}else {
+		} else {
 			AccountsMap[v.Recipient] = v.Amount
 		}
 	}
 
-    t.TxPool.Clear()
-    //余额不够的交易放回交易池
-    if len(unusedTx) > 0 {
-		for _, v := range unusedTx{
+	t.TxPool.Clear()
+	//余额不够的交易放回交易池
+	if len(unusedTx) > 0 {
+		for _, v := range unusedTx {
 			t.AddTxPool(&v)
 		}
 	}
@@ -137,17 +134,16 @@ func (t *Blockchain)PackageTx(newBlock *Block) {
 }
 
 var BlockchainInstance Blockchain = Blockchain{
-	TxPool : NewTxPool(),
+	TxPool: NewTxPool(),
 }
 
 var mutex = &sync.Mutex{}
 
-
-func Lock(){
+func Lock() {
 	mutex.Lock()
 }
 
-func UnLock(){
+func UnLock() {
 	mutex.Unlock()
 }
 
@@ -285,7 +281,7 @@ func WriteData(rw *bufio.ReadWriter) {
 
 		if len(BlockchainInstance.TxPool.AllTx) > 0 {
 			BlockchainInstance.PackageTx(&newBlock)
-		}else {
+		} else {
 			newBlock.Accounts = BlockchainInstance.LastBlock().Accounts
 		}
 
@@ -309,8 +305,6 @@ func WriteData(rw *bufio.ReadWriter) {
 	}
 
 }
-
-
 
 // make sure block is valid by checking index, and comparing the hash of the previous block
 func IsBlockValid(newBlock, oldBlock Block) bool {
