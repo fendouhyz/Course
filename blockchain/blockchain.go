@@ -224,9 +224,15 @@ func ReadData(rw *bufio.ReadWriter) {
 			return
 		}
 		if str != "\n" {
+			command, payload := commandDecode(str)
+			//fmt.Println("command:", command, " payload:", payload)
+
+			if command != "fullchain" {
+				log.Fatal("Wrong command")
+			}
 
 			chain := make([]Block, 0)
-			if err := json.Unmarshal([]byte(str), &chain); err != nil {
+			if err := json.Unmarshal([]byte(payload), &chain); err != nil {
 				log.Fatal(err)
 			}
 
@@ -260,7 +266,8 @@ func WriteData(rw *bufio.ReadWriter) {
 			mutex.Unlock()
 
 			mutex.Lock()
-			rw.WriteString(fmt.Sprintf("%s\n", string(bytes)))
+
+			rw.WriteString(fmt.Sprintf("%s%s\n", commandEncode("fullchain"), string(bytes)))
 			rw.Flush()
 			mutex.Unlock()
 
@@ -303,7 +310,7 @@ func WriteData(rw *bufio.ReadWriter) {
 		//spew.Dump(BlockchainInstance.Blocks)
 
 		mutex.Lock()
-		rw.WriteString(fmt.Sprintf("%s\n", string(bytes)))
+		rw.WriteString(fmt.Sprintf("%s%s\n", commandEncode("fullchain"), string(bytes)))
 		rw.Flush()
 		mutex.Unlock()
 	}
@@ -313,10 +320,12 @@ func WriteData(rw *bufio.ReadWriter) {
 // make sure block is valid by checking index, and comparing the hash of the previous block
 func IsBlockValid(newBlock, oldBlock Block) bool {
 	if oldBlock.Index+1 != newBlock.Index {
+		log.Println("Block Index invalid, old index: ", oldBlock.Index, " new index: ", newBlock.Index)
 		return false
 	}
 
 	if oldBlock.Hash != newBlock.PrevHash {
+		log.Println("Block PrevHash invalid, old Hash: ", oldBlock.Hash, " new PreHash: ", newBlock.PrevHash)
 		return false
 	}
 
@@ -371,4 +380,30 @@ func GenerateBlock(oldBlock Block, Result int) Block {
 func isHashValid(hash string, difficulty int) bool {
 	prefix := strings.Repeat("0", difficulty)
 	return strings.HasPrefix(hash, prefix)
+}
+
+func commandEncode(command string) string {
+	if command == "" {
+		log.Fatal("Wrong command: ", command)
+	}
+
+	return fmt.Sprintf("%d:%s", len(command), command)
+}
+
+func commandDecode(str string) (string, string) {
+	if str == "" {
+		log.Fatal("Wrong str: ", str)
+	}
+
+	colon := strings.Index(str, ":")
+	if colon <= 0 {
+		log.Fatal("Wrong str: ", str)
+	}
+
+	commandLen, err := strconv.Atoi(str[0:colon])
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return str[colon+1 : colon+commandLen+1], str[colon+commandLen+1:]
 }
