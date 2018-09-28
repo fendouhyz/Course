@@ -29,10 +29,11 @@ func main() {
 	initAccounts := flag.String("a", "", "init exist accounts whit value 10000")
 	secio := flag.Bool("secio", false, "enable secio[chain mode param]")
 	seed := flag.Int64("seed", 0, "set random seed for id generation[chain mode param]")
+	consensus := flag.String("con", "", "consensus mode[ \"pow\" or \"pos\"] to run[chain mode param]")
 	flag.Parse()
 
 	if *command == "chain" {
-		runblockchain(listenF, target, seed, secio, suffix, initAccounts)
+		runblockchain(listenF, target, seed, secio, suffix, initAccounts, consensus)
 	} else if *command == "account" {
 		cli := wallet.WalletCli{}
 		cli.Run()
@@ -41,7 +42,7 @@ func main() {
 	}
 }
 
-func runblockchain(listenF *int, target *string, seed *int64, secio *bool, suffix *string, initAccounts *string) {
+func runblockchain(listenF *int, target *string, seed *int64, secio *bool, suffix *string, initAccounts *string, consensus *string) {
 	t := time.Now()
 	genesisBlock := blockchain.Block{}
 	defaultAccounts := make(map[string]uint64)
@@ -72,6 +73,14 @@ func runblockchain(listenF *int, target *string, seed *int64, secio *bool, suffi
 		log.Println("option param -s miss [you can't send transacion with this node]")
 	} else {
 		blockchain.WalletSuffix = *suffix
+	}
+
+	if *consensus == "pos" {
+		blockchain.ConsensusMode = blockchain.PoS
+	} else if *consensus == "pow" {
+		blockchain.ConsensusMode = blockchain.PoW
+	} else {
+		log.Fatal("consensus mode[ \"pow\" or \"pos\"")
 	}
 
 	go rpc.RunHttpServer(*listenF + 1)

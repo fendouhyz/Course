@@ -25,9 +25,20 @@ import (
 	ma "github.com/multiformats/go-multiaddr"
 )
 
+// RunMode configed by start param
+type RunMode int
+
+const (
+	_ RunMode = iota
+	PoW
+	PoS
+)
+
 const difficulty = 1
 
 var WalletSuffix string
+
+var ConsensusMode RunMode
 
 // Block represents each 'item' in the blockchain
 type Block struct {
@@ -357,7 +368,12 @@ func GenerateBlock(oldBlock Block, Result int) Block {
 	newBlock.Result = Result
 	newBlock.PrevHash = oldBlock.Hash
 	newBlock.Difficulty = difficulty
-	//newBlock.Hash = CalculateHash(newBlock)
+
+	// for PoS
+	if ConsensusMode == PoS {
+		newBlock.Hash = CalculateHash(newBlock)
+		return newBlock
+	}
 
 	// for PoW
 	for i := 0; ; i++ {
