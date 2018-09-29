@@ -302,6 +302,34 @@ func WriteData(rw *bufio.ReadWriter) {
 
 	stdReader := bufio.NewReader(os.Stdin)
 
+	if ConsensusMode == PoS {
+		fmt.Print("Enter token balance:")
+
+		res, err := stdReader.ReadString('\n')
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		res = strings.Replace(res, "\n", "", -1)
+		balance, err := strconv.Atoi(res)
+		if err != nil {
+			log.Fatal(err)
+		} else if balance <= 0 {
+			log.Fatal("balance must > 0")
+		}
+
+		for k1, v1 := range DefaultAccounts {
+			if v1 > uint64(balance) {
+				validators[k1] = balance
+				break
+			}
+		}
+
+		if len(validators) == 0 {
+			log.Fatal("Not found default account or default account doesn't have enough tokens")
+		}
+	}
+
 	for {
 		fmt.Print("> ")
 		sendData, err := stdReader.ReadString('\n')
