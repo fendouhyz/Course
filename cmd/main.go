@@ -53,6 +53,7 @@ func runblockchain(listenF *int, target *string, seed *int64, secio *bool, suffi
 			return
 		}
 		blockchain.DefaultAccounts[*initAccounts] = 10000
+		blockchain.DefaultAddress = *initAccounts
 	}
 	genesisBlock = blockchain.Block{0, t.String(), 0, blockchain.CalculateHash(genesisBlock), "", 100, 1,
 		"the genesis block", nil, blockchain.DefaultAccounts, ""}

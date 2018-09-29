@@ -34,6 +34,13 @@ const (
 	PoS
 )
 
+// commands to comminucate within nodes
+const (
+	FULLSYNC  = "fullsync"
+	CANDIDATE = "candidate"
+	ANNOUNCE  = "announce"
+)
+
 const difficulty = 1
 
 var WalletSuffix string
@@ -41,6 +48,7 @@ var WalletSuffix string
 var ConsensusMode RunMode
 
 var DefaultAccounts = make(map[string]uint64)
+var DefaultAddress string
 
 // Block represents each 'item' in the blockchain
 type Block struct {
@@ -250,33 +258,55 @@ func ReadData(rw *bufio.ReadWriter) {
 			return
 		}
 		if str != "\n" {
-			command, payload := commandDecode(str)
-			//fmt.Println("command:", command, " payload:", payload)
+			command, payload := msgDecode(str)
 
-			if command != "fullchain" {
+			switch command {
+			case FULLSYNC:
+				handleFullSync(payload)
+			case CANDIDATE:
+				handleCandidate(payload)
+			case ANNOUNCE:
+				handleAnnounce(payload)
+			default:
 				log.Fatal("Wrong command")
 			}
-
-			chain := make([]Block, 0)
-			if err := json.Unmarshal([]byte(payload), &chain); err != nil {
-				log.Fatal(err)
-			}
-
-			mutex.Lock()
-			if len(chain) > len(BlockchainInstance.Blocks) {
-				BlockchainInstance.Blocks = chain
-				bytes, err := json.MarshalIndent(BlockchainInstance.Blocks, "", "  ")
-				if err != nil {
-
-					log.Fatal(err)
-				}
-				// Green console color: 	\x1b[32m
-				// Reset console color: 	\x1b[0m
-				fmt.Printf("\x1b[32m%s\x1b[0m> ", string(bytes))
-			}
-			mutex.Unlock()
 		}
 	}
+}
+
+func handleFullSync(payload string) {
+	chain := make([]Block, 0)
+	if err := json.Unmarshal([]byte(payload), &chain); err != nil {
+		log.Fatal(err)
+	}
+
+	mutex.Lock()
+	if len(chain) > len(BlockchainInstance.Blocks) {
+		BlockchainInstance.Blocks = chain
+		bytes, err := json.MarshalIndent(BlockchainInstance.Blocks, "", "  ")
+		if err != nil {
+			log.Fatal(err)
+		}
+		// Green console color: 	\x1b[32m
+		// Reset console color: 	\x1b[0m
+		fmt.Printf("\x1b[32m%s\x1b[0m> ", string(bytes))
+	}
+	mutex.Unlock()
+}
+
+func handleCandidate(payload string) {
+	//fmt.Println("handleCandidate:", payload)
+
+	newBlock := Block{}
+	if err := json.Unmarshal([]byte(payload), &newBlock); err != nil {
+		log.Fatal(err)
+	}
+
+	candidateBlocks <- newBlock
+}
+
+func handleAnnounce(payload string) {
+	fmt.Println(payload)
 }
 
 func WriteData(rw *bufio.ReadWriter) {
@@ -293,7 +323,7 @@ func WriteData(rw *bufio.ReadWriter) {
 
 			mutex.Lock()
 
-			rw.WriteString(fmt.Sprintf("%s%s\n", commandEncode("fullchain"), string(bytes)))
+			rw.WriteString(fmt.Sprintf("%s%s\n", commandEncode(FULLSYNC), string(bytes)))
 			rw.Flush()
 			mutex.Unlock()
 
@@ -358,23 +388,41 @@ func WriteData(rw *bufio.ReadWriter) {
 			}
 		}
 
-		if IsBlockValid(newBlock, BlockchainInstance.Blocks[len(BlockchainInstance.Blocks)-1]) {
+		mutex.Lock()
+		oldLastIndex := BlockchainInstance.Blocks[len(BlockchainInstance.Blocks)-1]
+		mutex.Unlock()
+
+		if ConsensusMode == PoS {
+			if IsBlockValid(newBlock, oldLastIndex) {
+				go func() {
+					bytes, err := json.Marshal(newBlock)
+					if err != nil {
+						log.Println(err)
+					}
+
+					rw.WriteString(fmt.Sprintf("%s%s\n", commandEncode(CANDIDATE), string(bytes)))
+				}()
+				candidateBlocks <- newBlock
+			}
+		} else {
+			if IsBlockValid(newBlock, oldLastIndex) {
+				mutex.Lock()
+				BlockchainInstance.Blocks = append(BlockchainInstance.Blocks, newBlock)
+				mutex.Unlock()
+			}
+
+			bytes, err := json.Marshal(BlockchainInstance.Blocks)
+			if err != nil {
+				log.Println(err)
+			}
+
+			//spew.Dump(BlockchainInstance.Blocks)
+
 			mutex.Lock()
-			BlockchainInstance.Blocks = append(BlockchainInstance.Blocks, newBlock)
+			rw.WriteString(fmt.Sprintf("%s%s\n", commandEncode(FULLSYNC), string(bytes)))
+			rw.Flush()
 			mutex.Unlock()
 		}
-
-		bytes, err := json.Marshal(BlockchainInstance.Blocks)
-		if err != nil {
-			log.Println(err)
-		}
-
-		//spew.Dump(BlockchainInstance.Blocks)
-
-		mutex.Lock()
-		rw.WriteString(fmt.Sprintf("%s%s\n", commandEncode("fullchain"), string(bytes)))
-		rw.Flush()
-		mutex.Unlock()
 	}
 
 }
@@ -423,6 +471,7 @@ func GenerateBlock(oldBlock Block, Result int) Block {
 	// for PoS
 	if ConsensusMode == PoS {
 		newBlock.Hash = CalculateHash(newBlock)
+		newBlock.Validator = DefaultAddress
 		return newBlock
 	}
 
@@ -457,7 +506,7 @@ func commandEncode(command string) string {
 	return fmt.Sprintf("%d:%s", len(command), command)
 }
 
-func commandDecode(str string) (string, string) {
+func msgDecode(str string) (string, string) {
 	if str == "" {
 		log.Fatal("Wrong str: ", str)
 	}
@@ -525,6 +574,10 @@ func pickWinner() {
 			}
 		}
 
+		if len(lotteryPool) == 0 {
+			goto CLEAR
+		}
+
 		// randomly pick winner from lottery pool
 		s := mrand.NewSource(time.Now().Unix())
 		r := mrand.New(s)
@@ -544,6 +597,7 @@ func pickWinner() {
 		}
 	}
 
+CLEAR:
 	tempMutex.Lock()
 	TempChainInstance.Blocks = []Block{}
 	tempMutex.Unlock()
