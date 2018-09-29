@@ -4,7 +4,7 @@
 2. Add commands protocol over p2p network
 3. Add "-con" param to config consensus mode at the launching time
 4. Add global accounts and broadcast to all peers
-5. Using default account to stake the balance in PoS mode
+5. Use default account to stake the balance in PoS mode
 6. Add "candidate" to complete the validation in PoS mode
 7. Test the cases of PoW and PoS to make sure the blockchain works.
 
