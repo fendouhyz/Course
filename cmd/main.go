@@ -42,19 +42,20 @@ func main() {
 	}
 }
 
-func runblockchain(listenF *int, target *string, seed *int64, secio *bool, suffix *string, initAccounts *string, consensus *string) {
+func runblockchain(listenF *int, target *string, seed *int64, secio *bool, suffix *string, initAccounts *string,
+	consensus *string) {
 	t := time.Now()
 	genesisBlock := blockchain.Block{}
-	defaultAccounts := make(map[string]uint64)
 
 	if *initAccounts != "" {
 		if wallet.ValidateAddress(*initAccounts) == false {
 			fmt.Println("Invalid address")
 			return
 		}
-		defaultAccounts[*initAccounts] = 10000
+		blockchain.DefaultAccounts[*initAccounts] = 10000
 	}
-	genesisBlock = blockchain.Block{0, t.String(), 0, blockchain.CalculateHash(genesisBlock), "", 100, 1, "the genesis block", nil, defaultAccounts}
+	genesisBlock = blockchain.Block{0, t.String(), 0, blockchain.CalculateHash(genesisBlock), "", 100, 1,
+		"the genesis block", nil, blockchain.DefaultAccounts, ""}
 
 	var blocks []blockchain.Block
 	blocks = append(blocks, genesisBlock)
@@ -77,6 +78,9 @@ func runblockchain(listenF *int, target *string, seed *int64, secio *bool, suffi
 
 	if *consensus == "pos" {
 		blockchain.ConsensusMode = blockchain.PoS
+
+		go blockchain.SetCandidate()
+		go blockchain.PickWinner()
 	} else if *consensus == "pow" {
 		blockchain.ConsensusMode = blockchain.PoW
 	} else {

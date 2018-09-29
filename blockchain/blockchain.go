@@ -40,6 +40,8 @@ var WalletSuffix string
 
 var ConsensusMode RunMode
 
+var DefaultAccounts = make(map[string]uint64)
+
 // Block represents each 'item' in the blockchain
 type Block struct {
 	Index        int               `json:"index"`
@@ -52,6 +54,7 @@ type Block struct {
 	Nonce        string            `json:"nonce"`
 	Transactions []Transaction     `json:"transactions"`
 	Accounts     map[string]uint64 `json:"accounts"`
+	Validator    string            `json:"validator"`
 }
 
 type Transaction struct {
@@ -161,6 +164,18 @@ func Lock() {
 func UnLock() {
 	mutex.Unlock()
 }
+
+var TempChainInstance Blockchain = Blockchain{
+	TxPool: NewTxPool(),
+}
+
+var tempMutex = &sync.Mutex{}
+
+// candidateBlocks handles incoming blocks for validation
+var candidateBlocks = make(chan Block)
+
+// validators keeps track of open validators and balances
+var validators = make(map[string]int)
 
 // makeBasicHost creates a LibP2P host with a random peer ID listening on the
 // given multiaddress. It will use secio if secio is true.
@@ -307,6 +322,14 @@ func WriteData(rw *bufio.ReadWriter) {
 			newBlock.Accounts = BlockchainInstance.LastBlock().Accounts
 		}
 
+		// add default account and broadcast to all nodes
+		for k1, v1 := range DefaultAccounts {
+			if _, ok := newBlock.Accounts[k1]; !ok {
+				newBlock.Accounts[k1] = v1
+				fmt.Println("add new accounts", k1, "=", v1)
+			}
+		}
+
 		if IsBlockValid(newBlock, BlockchainInstance.Blocks[len(BlockchainInstance.Blocks)-1]) {
 			mutex.Lock()
 			BlockchainInstance.Blocks = append(BlockchainInstance.Blocks, newBlock)
@@ -422,4 +445,78 @@ func commandDecode(str string) (string, string) {
 	}
 
 	return str[colon+1 : colon+commandLen+1], str[colon+commandLen+1:]
+}
+
+func SetCandidate() {
+	for candidate := range candidateBlocks {
+		tempMutex.Lock()
+		TempChainInstance.Blocks = append(TempChainInstance.Blocks, candidate)
+		tempMutex.Unlock()
+	}
+}
+
+func PickWinner() {
+	for {
+		pickWinner()
+	}
+}
+
+// pickWinner creates a lottery pool of validators and chooses the validator who gets to forge a block to the blockchain
+// by random selecting from the pool, weighted by amount of tokens staked
+func pickWinner() {
+	time.Sleep(15 * time.Second)
+	tempMutex.Lock()
+	temp := TempChainInstance.Blocks
+	tempMutex.Unlock()
+
+	lotteryPool := []string{}
+	if len(temp) > 0 {
+
+		// slightly modified traditional proof of stake algorithm
+		// from all validators who submitted a block, weight them by the number of staked tokens
+		// in traditional proof of stake, validators can participate without submitting a block to be forged
+	OUTER:
+		for _, block := range temp {
+			// if already in lottery pool, skip
+			for _, node := range lotteryPool {
+				if block.Validator == node {
+					continue OUTER
+				}
+			}
+
+			// lock list of validators to prevent data race
+			tempMutex.Lock()
+			setValidators := validators
+			tempMutex.Unlock()
+
+			k, ok := setValidators[block.Validator]
+			if ok {
+				for i := 0; i < k; i++ {
+					lotteryPool = append(lotteryPool, block.Validator)
+				}
+			}
+		}
+
+		// randomly pick winner from lottery pool
+		s := mrand.NewSource(time.Now().Unix())
+		r := mrand.New(s)
+		lotteryWinner := lotteryPool[r.Intn(len(lotteryPool))]
+
+		// add block of winner to blockchain and let all the other nodes know
+		for _, block := range temp {
+			if block.Validator == lotteryWinner {
+				mutex.Lock()
+				BlockchainInstance.Blocks = append(BlockchainInstance.Blocks, block)
+				mutex.Unlock()
+				/*for _ = range validators {
+					announcements <- "\nwinning validator: " + lotteryWinner + "\n"
+				}*/
+				break
+			}
+		}
+	}
+
+	tempMutex.Lock()
+	TempChainInstance.Blocks = []Block{}
+	tempMutex.Unlock()
 }
