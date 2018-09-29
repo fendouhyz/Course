@@ -8,6 +8,15 @@
 6. Add "candidate" to complete the validation in PoS mode
 7. Test the cases of PoW and PoS to make sure the blockchain works.
 
+### Command lines to test
+First console:
+
+$ ./cmd -c chain `-con pos` -s lzhx_ -l 8080 -a 16Li5cc51j2e73KW7EbuZkkemWBqYdQWCr
+
+Second console:
+
+$ ./cmd -s lzhx_ -c chain `-con pos` -l 8082 -d /ip4/127.0.0.1/tcp/8080/ipfs/QmSc9eqT65DHFhMvRG6JPvihuQ7h3h62towt5Hx5KUKqpz `-a 15WBVix6ddsGap7QY6mRh3u3cLKTHtzpNc`
+
 ## 操作说明
 
 
