@@ -21,6 +21,8 @@ import (
 	"encoding/gob"
 	"path/filepath"
 
+	"github.com/syndtr/goleveldb/leveldb"
+
 	libp2p "github.com/libp2p/go-libp2p"
 	crypto "github.com/libp2p/go-libp2p-crypto"
 	host "github.com/libp2p/go-libp2p-host"
@@ -53,6 +55,8 @@ var ConsensusMode RunMode
 
 var DefaultAccounts = make(map[string]Account)
 var DefaultAddress string
+
+var DB *leveldb.DB
 
 // Block represents each 'item' in the blockchain
 type Block struct {
@@ -245,13 +249,6 @@ var TempChainInstance Blockchain = Blockchain{
 
 var tempMutex = &sync.Mutex{}
 
-/*
-// candidateBlocks handles incoming blocks for validation
-var candidateBlocks = make(chan Block)
-
-// validators keeps track of open validators and balances
-var validators = make(map[string]int)
-*/
 // makeBasicHost creates a LibP2P host with a random peer ID listening on the
 // given multiaddress. It will use secio if secio is true.
 func MakeBasicHost(listenPort int, secio bool, randseed int64, initAccount string) (host.Host, error) {
@@ -366,7 +363,8 @@ func handleFullSync(payload string) {
 		// Green console color: 	\x1b[32m
 		// Reset console color: 	\x1b[0m
 		fmt.Printf("\x1b[32m%s\x1b[0m> ", string(bytes))
-		BlockchainInstance.WriteDate2File()
+		//BlockchainInstance.WriteDate2File()
+		BlockchainInstance.WriteToDb()
 	}
 	mutex.Unlock()
 }
@@ -505,7 +503,8 @@ func WriteData(rw *bufio.ReadWriter) {
 			}
 		}
 
-		BlockchainInstance.WriteDate2File()
+		//BlockchainInstance.WriteDate2File()
+		BlockchainInstance.WriteToDb()
 
 		b, err := json.MarshalIndent(BlockchainInstance.Blocks, "", "  ")
 		if err != nil {
@@ -628,4 +627,44 @@ func IsExist(file string) bool {
 		return os.IsExist(e)
 	}
 	return !fi.IsDir()
+}
+
+func (t *Blockchain) WriteToDb() {
+	if DB == nil {
+		return
+	}
+
+	bytes, err := json.Marshal(BlockchainInstance.Blocks)
+	if err != nil {
+		log.Println(err)
+	}
+
+	err = DB.Put([]byte("blockchain"), bytes, nil)
+	if err != nil {
+		log.Fatal("WriteToDb failed", err)
+	}
+
+	fmt.Println()
+	fmt.Printf("\n%sdb path:%s\n>", "WriteToDb succ ", t.DataDir)
+}
+
+func (t *Blockchain) ReadFromDb() {
+	if DB == nil {
+		return
+	}
+
+	bytes, err := DB.Get([]byte("blockchain"), nil)
+	if err != nil {
+		log.Println("ReadFromDb failed, maybe empty ", err)
+		return
+	}
+
+	var chain Blockchain
+	if err := json.Unmarshal([]byte(bytes), &chain.Blocks); err != nil {
+		log.Fatal(err)
+	}
+
+	chain.TxPool = NewTxPool()
+	chain.DataDir = BlockchainInstance.DataDir
+	BlockchainInstance = chain
 }

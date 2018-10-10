@@ -10,6 +10,7 @@ import (
 
 	"github.com/nil-zhang/Course/blockchain"
 	"github.com/nil-zhang/Course/rpc"
+	"github.com/syndtr/goleveldb/leveldb"
 
 	"os"
 
@@ -61,6 +62,13 @@ func runblockchain(listenF *int, target *string, seed *int64, secio *bool, suffi
 			log.Println(fmt.Sprintf("datadir[%s] not exist", *datadir))
 			return
 		}
+
+		db, err := leveldb.OpenFile(*datadir, nil)
+		if err != nil {
+			log.Fatal("open leveldb failed, path:", *datadir)
+		}
+		blockchain.DB = db
+		//defer db.Close()
 	}
 
 	t := time.Now()
@@ -86,7 +94,8 @@ func runblockchain(listenF *int, target *string, seed *int64, secio *bool, suffi
 	blockchain.BlockchainInstance.Blocks = blocks
 	blockchain.BlockchainInstance.DataDir = *datadir
 
-	blockchain.BlockchainInstance.ReadDataFromFile()
+	//blockchain.BlockchainInstance.ReadDataFromFile()
+	blockchain.BlockchainInstance.ReadFromDb()
 
 	// LibP2P code uses golog to log messages. They log with different
 	// string IDs (i.e. "swarm"). We can control the verbosity level for
