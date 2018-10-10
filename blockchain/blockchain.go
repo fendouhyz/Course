@@ -46,6 +46,13 @@ const (
 	ANNOUNCE  = "announce"
 )
 
+// leveldb key list
+const (
+	BLOCKS = "blocks"
+	STATES = "states"
+	TRANS  = "trans"
+)
+
 const difficulty = 1
 
 var WalletSuffix string
@@ -53,7 +60,9 @@ var DataFileName string = "chainData.txt"
 
 var ConsensusMode RunMode
 
-var GlobalState StateDB
+var GlobalState = StateDB{
+	Accounts: make(map[string]Account),
+}
 
 var DB *leveldb.DB
 
@@ -177,6 +186,13 @@ func (t *Blockchain) PackageTx(newBlock *Block) {
 	if len(unusedTx) > 0 {
 		for _, v := range unusedTx {
 			t.AddTxPool(&v)
+		}
+	}
+
+	for k1, v1 := range AccountsMap {
+		if _, ok := GlobalState.Accounts[k1]; !ok {
+			GlobalState.Accounts[k1] = v1
+			fmt.Println("add new accounts to GlobalState ", k1, "=", v1.Balance)
 		}
 	}
 
@@ -464,7 +480,7 @@ func WriteData(rw *bufio.ReadWriter) {
 			newBlock.Transactions = make([]Transaction, 0)
 		}
 
-		// add default account and broadcast to all nodes
+		// Merge GlobalState accounts to newBlock accounts and broadcast to all nodes
 		for k1, v1 := range GlobalState.Accounts {
 			if _, ok := newBlock.Accounts[k1]; !ok {
 				newBlock.Accounts[k1] = v1
@@ -638,18 +654,33 @@ func (t *Blockchain) WriteToDb() {
 		return
 	}
 
+	// write Blocks to leveldb
 	bytes, err := json.Marshal(BlockchainInstance.Blocks)
 	if err != nil {
 		log.Println(err)
 	}
 
-	err = DB.Put([]byte("blockchain"), bytes, nil)
+	err = DB.Put([]byte(BLOCKS), bytes, nil)
 	if err != nil {
-		log.Fatal("WriteToDb failed", err)
+		log.Fatal("Write blocks to db failed", err)
 	}
 
 	fmt.Println()
-	fmt.Printf("\n%sdb path:%s\n>", "WriteToDb succ ", t.DataDir)
+	fmt.Printf("\n%sdb path:%s\n>", "Write blocks to db succ ", t.DataDir)
+
+	// write GlobalState to leveldb
+	bytes, err = json.Marshal(GlobalState)
+	if err != nil {
+		log.Println(err)
+	}
+
+	err = DB.Put([]byte(STATES), bytes, nil)
+	if err != nil {
+		log.Fatal("Write states to db failed", err)
+	}
+
+	fmt.Println()
+	fmt.Printf("\n%sdb path:%s\n>", "Write states to db succ ", t.DataDir)
 }
 
 func (t *Blockchain) ReadFromDb() {
@@ -657,9 +688,10 @@ func (t *Blockchain) ReadFromDb() {
 		return
 	}
 
-	bytes, err := DB.Get([]byte("blockchain"), nil)
+	// read blocks from db
+	bytes, err := DB.Get([]byte(BLOCKS), nil)
 	if err != nil {
-		log.Println("ReadFromDb failed, maybe empty ", err)
+		log.Println("Read blocks from db failed, maybe empty ", err)
 		return
 	}
 
@@ -671,4 +703,26 @@ func (t *Blockchain) ReadFromDb() {
 	chain.TxPool = NewTxPool()
 	chain.DataDir = BlockchainInstance.DataDir
 	BlockchainInstance = chain
+
+	// read states from db
+	bytes, err = DB.Get([]byte(STATES), nil)
+	if err != nil {
+		log.Println("Read states from db failed, maybe empty ", err)
+		return
+	}
+
+	var stateDB StateDB
+	if err := json.Unmarshal([]byte(bytes), &stateDB); err != nil {
+		log.Fatal(err)
+	}
+
+	for k1, v1 := range stateDB.Accounts {
+		if _, ok := GlobalState.Accounts[k1]; !ok {
+			GlobalState.Accounts[k1] = v1
+		}
+	}
+
+	if len(GlobalState.Coinbase) == 0 {
+		GlobalState.Coinbase = stateDB.Coinbase
+	}
 }
