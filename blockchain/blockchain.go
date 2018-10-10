@@ -467,18 +467,38 @@ func WriteData(rw *bufio.ReadWriter) {
 		}
 
 		if IsBlockValid(newBlock, BlockchainInstance.Blocks[len(BlockchainInstance.Blocks)-1]) {
-			//pow 内容
-			mutex.Lock()
-			BlockchainInstance.Blocks = append(BlockchainInstance.Blocks, newBlock)
-			mutex.Unlock()
-			//pos 内容
-			//candidateBlocks <- newBlock
-		}
-		//pos 内容
-		//<-hasbeenValid
+			if ConsensusMode == PoW {
+				//pow 内容
+				mutex.Lock()
+				BlockchainInstance.Blocks = append(BlockchainInstance.Blocks, newBlock)
+				mutex.Unlock()
 
-		if err != nil {
-			log.Println(err)
+				bytes, err := json.Marshal(BlockchainInstance.Blocks)
+				if err != nil {
+					log.Println(err)
+				}
+
+				//spew.Dump(BlockchainInstance.Blocks)
+
+				mutex.Lock()
+				rw.WriteString(fmt.Sprintf("%s%s\n", commandEncode(FULLSYNC), string(bytes)))
+				rw.Flush()
+				mutex.Unlock()
+			} else {
+				//pos 内容
+				go func() {
+					bytes, err := json.Marshal(newBlock)
+					if err != nil {
+						log.Println(err)
+					}
+
+					rw.WriteString(fmt.Sprintf("%s%s\n", commandEncode(CANDIDATE), string(bytes)))
+				}()
+				candidateBlocks <- newBlock
+
+				//pos 内容
+				//<-hasbeenValid
+			}
 		}
 
 		BlockchainInstance.WriteDate2File()
@@ -490,42 +510,6 @@ func WriteData(rw *bufio.ReadWriter) {
 		// Green console color: 	\x1b[32m
 		// Reset console color: 	\x1b[0m
 		fmt.Printf("\x1b[32m%s\x1b[0m ", string(b))
-
-		mutex.Lock()
-		oldLastIndex := BlockchainInstance.Blocks[len(BlockchainInstance.Blocks)-1]
-		mutex.Unlock()
-
-		if ConsensusMode == PoS {
-			if IsBlockValid(newBlock, oldLastIndex) {
-				go func() {
-					bytes, err := json.Marshal(newBlock)
-					if err != nil {
-						log.Println(err)
-					}
-
-					rw.WriteString(fmt.Sprintf("%s%s\n", commandEncode(CANDIDATE), string(bytes)))
-				}()
-				candidateBlocks <- newBlock
-			}
-		} else {
-			if IsBlockValid(newBlock, oldLastIndex) {
-				mutex.Lock()
-				BlockchainInstance.Blocks = append(BlockchainInstance.Blocks, newBlock)
-				mutex.Unlock()
-			}
-
-			bytes, err := json.Marshal(BlockchainInstance.Blocks)
-			if err != nil {
-				log.Println(err)
-			}
-
-			//spew.Dump(BlockchainInstance.Blocks)
-
-			mutex.Lock()
-			rw.WriteString(fmt.Sprintf("%s%s\n", commandEncode(FULLSYNC), string(bytes)))
-			rw.Flush()
-			mutex.Unlock()
-		}
 	}
 }
 
@@ -541,7 +525,6 @@ func GenPosAddress() string {
 
 // make sure block is valid by checking index, and comparing the hash of the previous block
 func IsBlockValid(newBlock, oldBlock Block) bool {
-	return true
 	if oldBlock.Index+1 != newBlock.Index {
 		log.Println("Block Index invalid, old index: ", oldBlock.Index, " new index: ", newBlock.Index)
 		return false

@@ -13,8 +13,6 @@ var tempBlocks []Block
 // candidateBlocks handles incoming blocks for validation
 var candidateBlocks = make(chan Block)
 
-
-
 var hasbeenValid = make(chan int, 1)
 
 // validators keeps track of open validators and balances
@@ -86,7 +84,7 @@ func pickWinner() {
 				mutex.Lock()
 				BlockchainInstance.Blocks = append(BlockchainInstance.Blocks, block)
 				mutex.Unlock()
-				hasbeenValid<-1
+				//hasbeenValid <- 1
 				break
 			}
 		}
@@ -120,70 +118,5 @@ func PickWinner() {
 	for {
 		pickWinner()
 	}
-}
-
-// pickWinner creates a lottery pool of validators and chooses the validator who gets to forge a block to the blockchain
-// by random selecting from the pool, weighted by amount of tokens staked
-func pickWinner() {
-	time.Sleep(15 * time.Second)
-	tempMutex.Lock()
-	temp := TempChainInstance.Blocks
-	tempMutex.Unlock()
-
-	lotteryPool := []string{}
-	if len(temp) > 0 {
-
-		// slightly modified traditional proof of stake algorithm
-		// from all validators who submitted a block, weight them by the number of staked tokens
-		// in traditional proof of stake, validators can participate without submitting a block to be forged
-	OUTER:
-		for _, block := range temp {
-			// if already in lottery pool, skip
-			for _, node := range lotteryPool {
-				if block.Validator == node {
-					continue OUTER
-				}
-			}
-
-			// lock list of validators to prevent data race
-			tempMutex.Lock()
-			setValidators := validators
-			tempMutex.Unlock()
-
-			k, ok := setValidators[block.Validator]
-			if ok {
-				for i := 0; i < k; i++ {
-					lotteryPool = append(lotteryPool, block.Validator)
-				}
-			}
-		}
-
-		if len(lotteryPool) == 0 {
-			goto CLEAR
-		}
-
-		// randomly pick winner from lottery pool
-		s := mrand.NewSource(time.Now().Unix())
-		r := mrand.New(s)
-		lotteryWinner := lotteryPool[r.Intn(len(lotteryPool))]
-
-		// add block of winner to blockchain and let all the other nodes know
-		for _, block := range temp {
-			if block.Validator == lotteryWinner {
-				mutex.Lock()
-				BlockchainInstance.Blocks = append(BlockchainInstance.Blocks, block)
-				mutex.Unlock()
-				//for _ = range validators {
-				//	announcements <- "\nwinning validator: " + lotteryWinner + "\n"
-				//}
-				break
-			}
-		}
-	}
-
-CLEAR:
-	tempMutex.Lock()
-	TempChainInstance.Blocks = []Block{}
-	tempMutex.Unlock()
 }
 */
