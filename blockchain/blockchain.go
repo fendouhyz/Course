@@ -205,6 +205,10 @@ func (t *Blockchain) ReadDataFromFile() {
 
 	joinPath := filepath.Join(t.DataDir, DataFileName)
 
+	if !IsExist(joinPath) {
+		return
+	}
+
 	file, err := os.Open(joinPath) //以写方式打开文件
 	if err != nil {
 		log.Println("can't read data from file, open file fail err:", err)
@@ -529,26 +533,15 @@ func IsBlockValid(newBlock, oldBlock Block) bool {
 		log.Println("Block Index invalid, old index: ", oldBlock.Index, " new index: ", newBlock.Index)
 		return false
 	}
-
 	if oldBlock.Hash != newBlock.PrevHash {
 		log.Println("Block PrevHash invalid, old Hash: ", oldBlock.Hash, " new PreHash: ", newBlock.PrevHash)
 		return false
 	}
-
 	if CalculateHash(newBlock) != newBlock.Hash {
 		return false
 	}
 
 	return true
-}
-
-// SHA256 hashing
-func CalculateHash(block Block) string {
-	record := strconv.Itoa(block.Index) + block.Timestamp + strconv.Itoa(block.Result) + block.PrevHash + block.Nonce
-	h := sha256.New()
-	h.Write([]byte(record))
-	hashed := h.Sum(nil)
-	return hex.EncodeToString(hashed)
 }
 
 // create a new block using previous block's hash
@@ -577,7 +570,7 @@ func GenerateBlock(oldBlock Block, Result int, address string) Block {
 		newBlock.Nonce = hex
 		if !isHashValid(CalculateHash(newBlock), newBlock.Difficulty) {
 			fmt.Println(CalculateHash(newBlock), " do more work!")
-			time.Sleep(time.Second)
+			//time.Sleep(time.Second)
 			continue
 		} else {
 			fmt.Println(CalculateHash(newBlock), " work done!")
@@ -618,4 +611,21 @@ func msgDecode(str string) (string, string) {
 	}
 
 	return str[colon+1 : colon+commandLen+1], str[colon+commandLen+1:]
+}
+
+// SHA256 hasing
+func CalculateHash(block Block) string {
+	record := strconv.Itoa(block.Index) + block.Timestamp + strconv.Itoa(block.Result) + block.PrevHash + block.Nonce
+	h := sha256.New()
+	h.Write([]byte(record))
+	hashed := h.Sum(nil)
+	return hex.EncodeToString(hashed)
+}
+
+func IsExist(file string) bool {
+	fi, e := os.Stat(file)
+	if e != nil {
+		return os.IsExist(e)
+	}
+	return !fi.IsDir()
 }
