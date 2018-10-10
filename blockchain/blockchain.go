@@ -53,8 +53,7 @@ var DataFileName string = "chainData.txt"
 
 var ConsensusMode RunMode
 
-var DefaultAccounts = make(map[string]Account)
-var DefaultAddress string
+var GlobalState StateDB
 
 var DB *leveldb.DB
 
@@ -76,6 +75,11 @@ type Block struct {
 type Account struct {
 	Balance uint64 `json:"balance"`
 	State   uint64 `json:"state"`
+}
+
+type StateDB struct {
+	Accounts map[string]Account `json:"accounts"`
+	Coinbase string             `json:"coinbase"`
 }
 
 type Transaction struct {
@@ -425,7 +429,7 @@ func WriteData(rw *bufio.ReadWriter) {
 			log.Fatal("balance must > 0")
 		}
 
-		for k1, v1 := range DefaultAccounts {
+		for k1, v1 := range GlobalState.Accounts {
 			if v1.Balance > uint64(balance) {
 				validators[k1] = balance
 				break
@@ -461,7 +465,7 @@ func WriteData(rw *bufio.ReadWriter) {
 		}
 
 		// add default account and broadcast to all nodes
-		for k1, v1 := range DefaultAccounts {
+		for k1, v1 := range GlobalState.Accounts {
 			if _, ok := newBlock.Accounts[k1]; !ok {
 				newBlock.Accounts[k1] = v1
 				fmt.Println("add new accounts", k1, "=", v1.Balance)
@@ -558,7 +562,7 @@ func GenerateBlock(oldBlock Block, Result int, address string) Block {
 	// for PoS
 	if ConsensusMode == PoS {
 		newBlock.Hash = CalculateHash(newBlock)
-		newBlock.Validator = DefaultAddress
+		newBlock.Validator = GlobalState.Coinbase
 		return newBlock
 	}
 

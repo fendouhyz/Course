@@ -83,11 +83,11 @@ func runblockchain(listenF *int, target *string, seed *int64, secio *bool, suffi
 		newAccount := new(blockchain.Account)
 		newAccount.Balance = 10000
 		newAccount.State = 0
-		blockchain.DefaultAccounts[*initAccounts] = *newAccount
-		blockchain.DefaultAddress = *initAccounts
+		blockchain.GlobalState.Accounts[*initAccounts] = *newAccount
+		blockchain.GlobalState.Coinbase = *initAccounts
 	}
 
-	genesisBlock = blockchain.Block{0, t.String(), 0, blockchain.CalculateHash(genesisBlock), "", 100, make([]blockchain.Transaction, 0), blockchain.DefaultAccounts, difficulty, "", ""}
+	genesisBlock = blockchain.Block{0, t.String(), 0, blockchain.CalculateHash(genesisBlock), "", 100, make([]blockchain.Transaction, 0), blockchain.GlobalState.Accounts, difficulty, "", ""}
 
 	var blocks []blockchain.Block
 	blocks = append(blocks, genesisBlock)
