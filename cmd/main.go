@@ -11,6 +11,8 @@ import (
 	"github.com/nil-zhang/Course/blockchain"
 	"github.com/nil-zhang/Course/rpc"
 
+	"os"
+
 	golog "github.com/ipfs/go-log"
 	peer "github.com/libp2p/go-libp2p-peer"
 	pstore "github.com/libp2p/go-libp2p-peerstore"
@@ -19,10 +21,13 @@ import (
 	gologging "github.com/whyrusleeping/go-logging"
 )
 
+const difficulty = 1
+
 func main() {
 
 	// Parse options from the command line
 	command := flag.String("c", "", "mode[ \"chain\" or \"account\"]")
+	datadir := flag.String("datadir", "", "Data directory for the databases")
 	listenF := flag.Int("l", 0, "wait for incoming connections[chain mode param]")
 	target := flag.String("d", "", "target peer to dial[chain mode param]")
 	suffix := flag.String("s", "", "wallet suffix [chain mode param]")
@@ -33,7 +38,7 @@ func main() {
 	flag.Parse()
 
 	if *command == "chain" {
-		runblockchain(listenF, target, seed, secio, suffix, initAccounts, consensus)
+		runblockchain(listenF, target, seed, secio, suffix, initAccounts, datadir, consensus)
 	} else if *command == "account" {
 		cli := wallet.WalletCli{}
 		cli.Run()
@@ -43,7 +48,16 @@ func main() {
 }
 
 func runblockchain(listenF *int, target *string, seed *int64, secio *bool, suffix *string, initAccounts *string,
-	consensus *string) {
+	datadir *string, consensus *string) {
+	if *datadir == "" {
+		log.Println("data directory for this node miss，The data of the node will not be stored.")
+	}
+
+	if IsFile(*datadir) {
+		log.Println(fmt.Sprintf("datadir[%s] is a file", *datadir))
+		return
+	}
+
 	t := time.Now()
 	genesisBlock := blockchain.Block{}
 
@@ -52,15 +66,22 @@ func runblockchain(listenF *int, target *string, seed *int64, secio *bool, suffi
 			fmt.Println("Invalid address")
 			return
 		}
-		blockchain.DefaultAccounts[*initAccounts] = 10000
+
+		newAccount := new(blockchain.Account)
+		newAccount.Balance = 10000
+		newAccount.State = 0
+		blockchain.DefaultAccounts[*initAccounts] = *newAccount
 		blockchain.DefaultAddress = *initAccounts
 	}
-	genesisBlock = blockchain.Block{0, t.String(), 0, blockchain.CalculateHash(genesisBlock), "", 100, 1,
-		"the genesis block", nil, blockchain.DefaultAccounts, ""}
+
+	genesisBlock = blockchain.Block{0, t.String(), 0, blockchain.CalculateHash(genesisBlock), "", 100, make([]blockchain.Transaction, 0), blockchain.DefaultAccounts, difficulty, "", ""}
 
 	var blocks []blockchain.Block
 	blocks = append(blocks, genesisBlock)
 	blockchain.BlockchainInstance.Blocks = blocks
+	blockchain.BlockchainInstance.DataDir = *datadir
+
+	blockchain.BlockchainInstance.ReadDataFromFile()
 
 	// LibP2P code uses golog to log messages. They log with different
 	// string IDs (i.e. "swarm"). We can control the verbosity level for
@@ -80,8 +101,8 @@ func runblockchain(listenF *int, target *string, seed *int64, secio *bool, suffi
 	if *consensus == "pos" {
 		blockchain.ConsensusMode = blockchain.PoS
 
-		go blockchain.SetCandidate()
-		go blockchain.PickWinner()
+		//go blockchain.SetCandidate()
+		//go blockchain.PickWinner()
 	} else if *consensus == "pow" {
 		blockchain.ConsensusMode = blockchain.PoW
 	} else {
@@ -91,7 +112,7 @@ func runblockchain(listenF *int, target *string, seed *int64, secio *bool, suffi
 	go rpc.RunHttpServer(*listenF + 1)
 
 	// Make a host that listens on the given multiaddress
-	ha, err := blockchain.MakeBasicHost(*listenF, *secio, *seed)
+	ha, err := blockchain.MakeBasicHost(*listenF, *secio, *seed, *initAccounts)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -152,4 +173,12 @@ func runblockchain(listenF *int, target *string, seed *int64, secio *bool, suffi
 		select {} // hang forever
 
 	}
+}
+
+func IsFile(f string) bool {
+	fi, e := os.Stat(f)
+	if e != nil {
+		return false
+	}
+	return !fi.IsDir()
 }

@@ -18,6 +18,9 @@ import (
 	"time"
 
 	//"github.com/davecgh/go-spew/spew"
+	"encoding/gob"
+	"path/filepath"
+
 	libp2p "github.com/libp2p/go-libp2p"
 	crypto "github.com/libp2p/go-libp2p-crypto"
 	host "github.com/libp2p/go-libp2p-host"
@@ -44,25 +47,31 @@ const (
 const difficulty = 1
 
 var WalletSuffix string
+var DataFileName string = "chainData.txt"
 
 var ConsensusMode RunMode
 
-var DefaultAccounts = make(map[string]uint64)
+var DefaultAccounts = make(map[string]Account)
 var DefaultAddress string
 
 // Block represents each 'item' in the blockchain
 type Block struct {
-	Index        int               `json:"index"`
-	Timestamp    string            `json:"timestamp"`
-	Result       int               `json:"result"`
-	Hash         string            `json:"hash"`
-	PrevHash     string            `json:"prevhash"`
-	Proof        uint64            `json:"proof"`
-	Difficulty   int               `json:"difficulty"`
-	Nonce        string            `json:"nonce"`
-	Transactions []Transaction     `json:"transactions"`
-	Accounts     map[string]uint64 `json:"accounts"`
-	Validator    string            `json:"validator"`
+	Index        int                `json:"index"`
+	Timestamp    string             `json:"timestamp"`
+	Result       int                `json:"result"`
+	Hash         string             `json:"hash"`
+	PrevHash     string             `json:"prevhash"`
+	Proof        uint64             `json:"proof"`
+	Transactions []Transaction      `json:"transactions"`
+	Accounts     map[string]Account `json:"accounts"`
+	Difficulty   int                `json:"difficulty"`
+	Nonce        string             `json:"nonce"`
+	Validator    string             `json:"validator"`
+}
+
+type Account struct {
+	Balance uint64 `json:"balance"`
+	State   uint64 `json:"state"`
 }
 
 type Transaction struct {
@@ -92,8 +101,9 @@ func (p *TxPool) Clear() bool {
 
 // Blockchain is a series of validated Blocks
 type Blockchain struct {
-	Blocks []Block
-	TxPool *TxPool
+	Blocks  []Block
+	TxPool  *TxPool
+	DataDir string
 }
 
 func (t *Blockchain) NewTransaction(sender string, recipient string, amount uint64, data []byte) *Transaction {
@@ -118,7 +128,7 @@ func (t *Blockchain) LastBlock() Block {
 func (t *Blockchain) GetBalance(address string) uint64 {
 	accounts := t.LastBlock().Accounts
 	if value, ok := accounts[address]; ok {
-		return value
+		return value.Balance
 	}
 	return 0
 }
@@ -134,17 +144,23 @@ func (t *Blockchain) PackageTx(newBlock *Block) {
 
 	for _, v := range t.TxPool.AllTx {
 		if value, ok := AccountsMap[v.Sender]; ok {
-			if value < v.Amount {
+			if value.Balance < v.Amount {
 				unusedTx = append(unusedTx, v)
 				continue
 			}
-			AccountsMap[v.Sender] = value - v.Amount
+			value.Balance -= v.Amount
+			value.State += 1
+			AccountsMap[v.Sender] = value
 		}
 
 		if value, ok := AccountsMap[v.Recipient]; ok {
-			AccountsMap[v.Recipient] = value + v.Amount
+			value.Balance += v.Amount
+			AccountsMap[v.Recipient] = value
 		} else {
-			AccountsMap[v.Recipient] = v.Amount
+			newAccount := new(Account)
+			newAccount.Balance = v.Amount
+			newAccount.State = 0
+			AccountsMap[v.Recipient] = *newAccount
 		}
 	}
 
@@ -157,6 +173,52 @@ func (t *Blockchain) PackageTx(newBlock *Block) {
 	}
 
 	(*newBlock).Accounts = AccountsMap
+}
+
+func (t *Blockchain) WriteDate2File() {
+	if t.DataDir == "" {
+		return
+	}
+
+	joinPath := filepath.Join(t.DataDir, DataFileName)
+
+	file, err := os.OpenFile(joinPath, os.O_WRONLY|os.O_CREATE, 0755) //以写方式打开文件
+	if err != nil {
+		log.Println("can't write data to file, open file fail err:", err)
+		return
+	}
+	defer file.Close()
+	enc := gob.NewEncoder(file)
+
+	if err := enc.Encode(t); err != nil {
+		log.Fatal("encode error:", err)
+	}
+
+	fmt.Println()
+	fmt.Printf("\n%sfile:%s\n>", "已配置数据存储目录，写入当前数据到存储目录中.", t.DataDir+DataFileName)
+}
+
+func (t *Blockchain) ReadDataFromFile() {
+	if t.DataDir == "" {
+		return
+	}
+
+	joinPath := filepath.Join(t.DataDir, DataFileName)
+
+	file, err := os.Open(joinPath) //以写方式打开文件
+	if err != nil {
+		log.Println("can't read data from file, open file fail err:", err)
+		return
+	}
+	defer file.Close()
+	dec := gob.NewDecoder(file)
+
+	var blockchainInstanceFromFile Blockchain
+	if err := dec.Decode(&blockchainInstanceFromFile); err != nil {
+		log.Fatal("decode error:", err)
+	}
+
+	BlockchainInstance = blockchainInstanceFromFile
 }
 
 var BlockchainInstance Blockchain = Blockchain{
@@ -179,15 +241,16 @@ var TempChainInstance Blockchain = Blockchain{
 
 var tempMutex = &sync.Mutex{}
 
+/*
 // candidateBlocks handles incoming blocks for validation
 var candidateBlocks = make(chan Block)
 
 // validators keeps track of open validators and balances
 var validators = make(map[string]int)
-
+*/
 // makeBasicHost creates a LibP2P host with a random peer ID listening on the
 // given multiaddress. It will use secio if secio is true.
-func MakeBasicHost(listenPort int, secio bool, randseed int64) (host.Host, error) {
+func MakeBasicHost(listenPort int, secio bool, randseed int64, initAccount string) (host.Host, error) {
 
 	// If the seed is zero, use real cryptographic randomness. Otherwise, use a
 	// deterministic randomness source to make generated keys stay the same
@@ -225,9 +288,17 @@ func MakeBasicHost(listenPort int, secio bool, randseed int64) (host.Host, error
 	fullAddr := addr.Encapsulate(hostAddr)
 	log.Printf("I am %s\n", fullAddr)
 	if secio {
-		log.Printf("Now run \"go run main.go -c chain -l %d -d %s -secio\" on a different terminal\n", listenPort+2, fullAddr)
+		if initAccount != "" {
+			log.Printf("Now run \"go run main.go -c chain -l %d -a %s -d %s -secio\" on a different terminal\n", listenPort+2, initAccount, fullAddr)
+		} else {
+			log.Printf("Now run \"go run main.go -c chain -l %d -d %s -secio\" on a different terminal\n", listenPort+2, fullAddr)
+		}
 	} else {
-		log.Printf("Now run \"go run main.go -c chain -l %d -d %s\" on a different terminal\n", listenPort+2, fullAddr)
+		if initAccount != "" {
+			log.Printf("Now run \"go run main.go -c chain -l %d -a %s -d %s\" on a different terminal\n", listenPort+2, initAccount, fullAddr)
+		} else {
+			log.Printf("Now run \"go run main.go -c chain -l %d -d %s\" on a different terminal\n", listenPort+2, fullAddr)
+		}
 	}
 
 	return basicHost, nil
@@ -257,6 +328,7 @@ func ReadData(rw *bufio.ReadWriter) {
 		if str == "" {
 			return
 		}
+
 		if str != "\n" {
 			command, payload := msgDecode(str)
 
@@ -290,6 +362,7 @@ func handleFullSync(payload string) {
 		// Green console color: 	\x1b[32m
 		// Reset console color: 	\x1b[0m
 		fmt.Printf("\x1b[32m%s\x1b[0m> ", string(bytes))
+		BlockchainInstance.WriteDate2File()
 	}
 	mutex.Unlock()
 }
@@ -310,6 +383,7 @@ func handleAnnounce(payload string) {
 }
 
 func WriteData(rw *bufio.ReadWriter) {
+	go pos()
 
 	go func() {
 		for {
@@ -349,7 +423,7 @@ func WriteData(rw *bufio.ReadWriter) {
 		}
 
 		for k1, v1 := range DefaultAccounts {
-			if v1 > uint64(balance) {
+			if v1.Balance > uint64(balance) {
 				validators[k1] = balance
 				break
 			}
@@ -372,21 +446,48 @@ func WriteData(rw *bufio.ReadWriter) {
 		if err != nil {
 			log.Fatal(err)
 		}
-		newBlock := GenerateBlock(BlockchainInstance.Blocks[len(BlockchainInstance.Blocks)-1], _result)
+
+		address := GenPosAddress()
+		newBlock := GenerateBlock(BlockchainInstance.Blocks[len(BlockchainInstance.Blocks)-1], _result, address)
 
 		if len(BlockchainInstance.TxPool.AllTx) > 0 {
 			BlockchainInstance.PackageTx(&newBlock)
 		} else {
 			newBlock.Accounts = BlockchainInstance.LastBlock().Accounts
+			newBlock.Transactions = make([]Transaction, 0)
 		}
 
 		// add default account and broadcast to all nodes
 		for k1, v1 := range DefaultAccounts {
 			if _, ok := newBlock.Accounts[k1]; !ok {
 				newBlock.Accounts[k1] = v1
-				fmt.Println("add new accounts", k1, "=", v1)
+				fmt.Println("add new accounts", k1, "=", v1.Balance)
 			}
 		}
+
+		if IsBlockValid(newBlock, BlockchainInstance.Blocks[len(BlockchainInstance.Blocks)-1]) {
+			fmt.Println(newBlock)
+			//candidateBlocks <- newBlock
+			mutex.Lock()
+			BlockchainInstance.Blocks = append(BlockchainInstance.Blocks, newBlock)
+			mutex.Unlock()
+		}
+
+		//bytes, err := json.Marshal(BlockchainInstance.Blocks)
+		if err != nil {
+			log.Println(err)
+		}
+
+		BlockchainInstance.WriteDate2File()
+		//spew.Dump(BlockchainInstance.Blocks)
+
+		b, err := json.MarshalIndent(BlockchainInstance.Blocks, "", "  ")
+		if err != nil {
+			log.Fatal(err)
+		}
+		// Green console color: 	\x1b[32m
+		// Reset console color: 	\x1b[0m
+		fmt.Printf("\x1b[32m%s\x1b[0m ", string(b))
 
 		mutex.Lock()
 		oldLastIndex := BlockchainInstance.Blocks[len(BlockchainInstance.Blocks)-1]
@@ -424,11 +525,21 @@ func WriteData(rw *bufio.ReadWriter) {
 			mutex.Unlock()
 		}
 	}
+}
 
+func GenPosAddress() string {
+	var address string
+	t := time.Now()
+	address = SHA256Hasing(t.String())
+	//@todo
+	validators[address] = 500
+	fmt.Println(validators)
+	return address
 }
 
 // make sure block is valid by checking index, and comparing the hash of the previous block
 func IsBlockValid(newBlock, oldBlock Block) bool {
+	return true
 	if oldBlock.Index+1 != newBlock.Index {
 		log.Println("Block Index invalid, old index: ", oldBlock.Index, " new index: ", newBlock.Index)
 		return false
@@ -456,8 +567,7 @@ func CalculateHash(block Block) string {
 }
 
 // create a new block using previous block's hash
-func GenerateBlock(oldBlock Block, Result int) Block {
-
+func GenerateBlock(oldBlock Block, Result int, address string) Block {
 	var newBlock Block
 
 	t := time.Now()
@@ -522,83 +632,4 @@ func msgDecode(str string) (string, string) {
 	}
 
 	return str[colon+1 : colon+commandLen+1], str[colon+commandLen+1:]
-}
-
-func SetCandidate() {
-	for candidate := range candidateBlocks {
-		tempMutex.Lock()
-		TempChainInstance.Blocks = append(TempChainInstance.Blocks, candidate)
-		tempMutex.Unlock()
-	}
-}
-
-func PickWinner() {
-	for {
-		pickWinner()
-	}
-}
-
-// pickWinner creates a lottery pool of validators and chooses the validator who gets to forge a block to the blockchain
-// by random selecting from the pool, weighted by amount of tokens staked
-func pickWinner() {
-	time.Sleep(15 * time.Second)
-	tempMutex.Lock()
-	temp := TempChainInstance.Blocks
-	tempMutex.Unlock()
-
-	lotteryPool := []string{}
-	if len(temp) > 0 {
-
-		// slightly modified traditional proof of stake algorithm
-		// from all validators who submitted a block, weight them by the number of staked tokens
-		// in traditional proof of stake, validators can participate without submitting a block to be forged
-	OUTER:
-		for _, block := range temp {
-			// if already in lottery pool, skip
-			for _, node := range lotteryPool {
-				if block.Validator == node {
-					continue OUTER
-				}
-			}
-
-			// lock list of validators to prevent data race
-			tempMutex.Lock()
-			setValidators := validators
-			tempMutex.Unlock()
-
-			k, ok := setValidators[block.Validator]
-			if ok {
-				for i := 0; i < k; i++ {
-					lotteryPool = append(lotteryPool, block.Validator)
-				}
-			}
-		}
-
-		if len(lotteryPool) == 0 {
-			goto CLEAR
-		}
-
-		// randomly pick winner from lottery pool
-		s := mrand.NewSource(time.Now().Unix())
-		r := mrand.New(s)
-		lotteryWinner := lotteryPool[r.Intn(len(lotteryPool))]
-
-		// add block of winner to blockchain and let all the other nodes know
-		for _, block := range temp {
-			if block.Validator == lotteryWinner {
-				mutex.Lock()
-				BlockchainInstance.Blocks = append(BlockchainInstance.Blocks, block)
-				mutex.Unlock()
-				/*for _ = range validators {
-					announcements <- "\nwinning validator: " + lotteryWinner + "\n"
-				}*/
-				break
-			}
-		}
-	}
-
-CLEAR:
-	tempMutex.Lock()
-	TempChainInstance.Blocks = []Block{}
-	tempMutex.Unlock()
 }

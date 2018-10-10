@@ -84,13 +84,16 @@ func handleWriteBlock(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
-	newBlock := blockchain.GenerateBlock(blockchain.BlockchainInstance.Blocks[len(blockchain.BlockchainInstance.Blocks)-1], m.Msg)
+
+	address := blockchain.GenPosAddress()
+	newBlock := blockchain.GenerateBlock(blockchain.BlockchainInstance.Blocks[len(blockchain.BlockchainInstance.Blocks)-1], m.Msg, address)
 
 
 	if len(blockchain.BlockchainInstance.TxPool.AllTx) > 0 {
 		blockchain.BlockchainInstance.PackageTx(&newBlock)
 	}else {
 		newBlock.Accounts = blockchain.BlockchainInstance.LastBlock().Accounts
+		newBlock.Transactions = make([]blockchain.Transaction,0)
 	}
 
 	if blockchain.IsBlockValid(newBlock, blockchain.BlockchainInstance.Blocks[len(blockchain.BlockchainInstance.Blocks)-1]) {
@@ -100,6 +103,7 @@ func handleWriteBlock(w http.ResponseWriter, r *http.Request) {
 		spew.Dump(blockchain.BlockchainInstance.Blocks)
 	}
 
+	blockchain.BlockchainInstance.WriteDate2File()
 	respondWithJSON(w, r, http.StatusCreated, newBlock)
 
 }
