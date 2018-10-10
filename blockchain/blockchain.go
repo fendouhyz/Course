@@ -195,7 +195,7 @@ func (t *Blockchain) WriteDate2File() {
 	}
 
 	fmt.Println()
-	fmt.Printf("\n%sfile:%s\n>", "已配置数据存储目录，写入当前数据到存储目录中.", t.DataDir+DataFileName)
+	fmt.Printf("\n%sfile:%s\n>", "已配置数据存储目录，写入当前数据到存储目录中.", filepath.Join(t.DataDir, DataFileName))
 }
 
 func (t *Blockchain) ReadDataFromFile() {
@@ -289,15 +289,15 @@ func MakeBasicHost(listenPort int, secio bool, randseed int64, initAccount strin
 	log.Printf("I am %s\n", fullAddr)
 	if secio {
 		if initAccount != "" {
-			log.Printf("Now run \"go run main.go -c chain -l %d -a %s -d %s -secio\" on a different terminal\n", listenPort+2, initAccount, fullAddr)
+			log.Printf("Now run \"go run main.go \x1b[32m -c chain -l %d -a %s -d %s -secio\x1b[0m\" on a different terminal\n", listenPort+2, initAccount, fullAddr)
 		} else {
-			log.Printf("Now run \"go run main.go -c chain -l %d -d %s -secio\" on a different terminal\n", listenPort+2, fullAddr)
+			log.Printf("Now run \"go run main.go \x1b[32m -c chain -l %d -d %s -secio\x1b[0m\" on a different terminal\n", listenPort+2, fullAddr)
 		}
 	} else {
 		if initAccount != "" {
-			log.Printf("Now run \"go run main.go -c chain -l %d -a %s -d %s\" on a different terminal\n", listenPort+2, initAccount, fullAddr)
+			log.Printf("Now run \"go run main.go \x1b[32m -c chain -l %d -a %s -d %s\x1b[0m\" on a different terminal\n", listenPort+2, initAccount, fullAddr)
 		} else {
-			log.Printf("Now run \"go run main.go -c chain -l %d -d %s\" on a different terminal\n", listenPort+2, fullAddr)
+			log.Printf("Now run \"go run main.go \x1b[32m -c chain -l %d -d %s\x1b[0m\" on a different terminal\n", listenPort+2, fullAddr)
 		}
 	}
 
@@ -383,6 +383,7 @@ func handleAnnounce(payload string) {
 }
 
 func WriteData(rw *bufio.ReadWriter) {
+	//pos 内容
 	go pos()
 
 	go func() {
@@ -466,20 +467,21 @@ func WriteData(rw *bufio.ReadWriter) {
 		}
 
 		if IsBlockValid(newBlock, BlockchainInstance.Blocks[len(BlockchainInstance.Blocks)-1]) {
-			fmt.Println(newBlock)
-			//candidateBlocks <- newBlock
+			//pow 内容
 			mutex.Lock()
 			BlockchainInstance.Blocks = append(BlockchainInstance.Blocks, newBlock)
 			mutex.Unlock()
+			//pos 内容
+			//candidateBlocks <- newBlock
 		}
+		//pos 内容
+		//<-hasbeenValid
 
-		//bytes, err := json.Marshal(BlockchainInstance.Blocks)
 		if err != nil {
 			log.Println(err)
 		}
 
 		BlockchainInstance.WriteDate2File()
-		//spew.Dump(BlockchainInstance.Blocks)
 
 		b, err := json.MarshalIndent(BlockchainInstance.Blocks, "", "  ")
 		if err != nil {
@@ -586,6 +588,7 @@ func GenerateBlock(oldBlock Block, Result int, address string) Block {
 	}
 
 	// for PoW
+	//pow 内容
 	for i := 0; ; i++ {
 		hex := fmt.Sprintf("%x", i)
 		newBlock.Nonce = hex

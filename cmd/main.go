@@ -51,11 +51,16 @@ func runblockchain(listenF *int, target *string, seed *int64, secio *bool, suffi
 	datadir *string, consensus *string) {
 	if *datadir == "" {
 		log.Println("data directory for this node miss，The data of the node will not be stored.")
-	}
+	}else {
+		if IsFile(*datadir) {
+			log.Println(fmt.Sprintf("datadir[%s] is a file", *datadir))
+			return
+		}
 
-	if IsFile(*datadir) {
-		log.Println(fmt.Sprintf("datadir[%s] is a file", *datadir))
-		return
+		if !IsExist(*datadir) {
+			log.Println(fmt.Sprintf("datadir[%s] not exist", *datadir))
+			return
+		}
 	}
 
 	t := time.Now()
@@ -181,4 +186,12 @@ func IsFile(f string) bool {
 		return false
 	}
 	return !fi.IsDir()
+}
+
+func IsExist(dir string) bool {
+	fi, e := os.Stat(dir)
+	if e != nil {
+		return os.IsExist(e)
+	}
+	return fi.IsDir()
 }
