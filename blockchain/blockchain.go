@@ -54,6 +54,12 @@ const (
 	TRANS  = "trans"
 )
 
+// VM instruction
+const (
+	ADD = "add"
+	SUB = "sub"
+)
+
 const difficulty = 1
 
 var WalletSuffix string
@@ -183,9 +189,22 @@ func (t *Blockchain) PackageTx(newBlock *Block) {
 				unusedTx = append(unusedTx, v)
 				continue
 			}
-			value.Balance -= v.Amount
-			value.State += 1
-			AccountsMap[v.Sender] = value
+
+			if v.Recipient == "" {
+				switch string(v.Data) {
+				case ADD:
+					value.State += 1
+				case SUB:
+					value.State -= 1
+				default:
+				}
+				AccountsMap[v.Sender] = value
+				continue
+			} else {
+				value.Balance -= v.Amount
+				value.State += 1
+				AccountsMap[v.Sender] = value
+			}
 		}
 
 		if value, ok := AccountsMap[v.Recipient]; ok {

@@ -52,6 +52,21 @@ func handleWriteTx(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
+	// special transaction
+	if m.To == "" && m.Data != "" {
+		if !wallet.ValidateAddress(m.From) {
+			fmt.Println("ERROR: Sender address is not valid")
+			respondWithJSON(w, r, http.StatusBadRequest, r.Body)
+			return
+		}
+
+		tx := blockchain.BlockchainInstance.NewTransaction(m.From, m.To, m.Value, []byte(m.Data))
+		blockchain.BlockchainInstance.AddTxPool(tx)
+
+		respondWithJSON(w, r, http.StatusCreated, tx)
+		return
+	}
+
 	validate := wallet.Validate_Address(m.From, m.To, m.Value, blockchain.WalletSuffix)
 	if false == validate {
 		fmt.Println("Parameter verification failed")
@@ -171,7 +186,6 @@ func handlePeers(w http.ResponseWriter, r *http.Request) {
 	p.List = make([]string, 0)
 	for peer := range blockchain.PeerPool {
 		p.List = append(p.List, peer)
-		fmt.Println(peer)
 	}
 
 	respondWithJSON(w, r, http.StatusCreated, p)
