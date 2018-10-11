@@ -41,9 +41,10 @@ const (
 
 // commands to comminucate within nodes
 const (
-	FULLSYNC  = "fullsync"
-	CANDIDATE = "candidate"
-	ANNOUNCE  = "announce"
+	FULLSYNC    = "fullsync"
+	CANDIDATE   = "candidate"
+	ANNOUNCE    = "announce"
+	TRANSACTION = "transaction"
 )
 
 // leveldb key list
@@ -59,6 +60,8 @@ var WalletSuffix string
 var DataFileName string = "chainData.txt"
 
 var ConsensusMode RunMode
+
+var PeerPool = make(map[string]*bufio.ReadWriter)
 
 var GlobalState = StateDB{
 	Accounts: make(map[string]Account),
@@ -134,6 +137,21 @@ func (t *Blockchain) NewTransaction(sender string, recipient string, amount uint
 }
 
 func (t *Blockchain) AddTxPool(tx *Transaction) int {
+	// broadcast to peers
+	for _, rw := range PeerPool {
+		bytes, err := json.Marshal(tx)
+		if err != nil {
+			fmt.Println(err)
+			return -1
+		}
+
+		mutex.Lock()
+		rw.WriteString(fmt.Sprintf("%s%s\n", commandEncode(TRANSACTION), string(bytes)))
+		rw.Flush()
+		mutex.Unlock()
+	}
+
+	// add to local TxPool
 	t.TxPool.AllTx = append(t.TxPool.AllTx, *tx)
 	return len(t.TxPool.AllTx)
 }
@@ -335,6 +353,9 @@ func HandleStream(s net.Stream) {
 	go ReadData(rw)
 	go WriteData(rw)
 
+	peerID := net.Stream.Conn(s).RemotePeer()
+	log.Println("Remote peer ID:", peerID)
+	PeerPool[string(peerID)] = rw
 	// stream 's' will stay open until you close it (or the other side closes it).
 }
 
@@ -360,6 +381,8 @@ func ReadData(rw *bufio.ReadWriter) {
 				handleCandidate(payload)
 			case ANNOUNCE:
 				handleAnnounce(payload)
+			case TRANSACTION:
+				handleTransaction(payload)
 			default:
 				log.Fatal("Wrong command")
 			}
@@ -387,6 +410,22 @@ func handleFullSync(payload string) {
 		BlockchainInstance.WriteToDb()
 	}
 	mutex.Unlock()
+
+	// remove the transactions of the last block from local Txpool
+	mutex.Lock()
+	lastBlock := BlockchainInstance.LastBlock()
+	mutex.Unlock()
+
+	for _, tx := range lastBlock.Transactions {
+		hash := CalculateTxHash(tx)
+		for _, key := range BlockchainInstance.TxPool.AllTx {
+			if hash == CalculateTxHash(key) {
+				// TODO: Array is not firendly to remove.
+				BlockchainInstance.TxPool.Clear()
+				return
+			}
+		}
+	}
 }
 
 func handleCandidate(payload string) {
@@ -402,6 +441,18 @@ func handleCandidate(payload string) {
 
 func handleAnnounce(payload string) {
 	fmt.Println(payload)
+}
+
+func handleTransaction(payload string) {
+	//fmt.Println("handleTransaction:", payload)
+
+	tx := Transaction{}
+	if err := json.Unmarshal([]byte(payload), &tx); err != nil {
+		log.Fatal(err)
+	}
+
+	// add to local TxPool
+	BlockchainInstance.TxPool.AllTx = append(BlockchainInstance.TxPool.AllTx, tx)
 }
 
 func WriteData(rw *bufio.ReadWriter) {
@@ -725,4 +776,13 @@ func (t *Blockchain) ReadFromDb() {
 	if len(GlobalState.Coinbase) == 0 {
 		GlobalState.Coinbase = stateDB.Coinbase
 	}
+}
+
+// SHA256 hasing of Transaction
+func CalculateTxHash(tx Transaction) string {
+	record := strconv.Itoa(int(tx.Amount)) + tx.Recipient + tx.Sender
+	h := sha256.New()
+	h.Write([]byte(record))
+	hashed := h.Sum(nil)
+	return hex.EncodeToString(hashed)
 }

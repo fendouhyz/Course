@@ -15,6 +15,7 @@ import (
 	"os"
 
 	golog "github.com/ipfs/go-log"
+	net "github.com/libp2p/go-libp2p-net"
 	peer "github.com/libp2p/go-libp2p-peer"
 	pstore "github.com/libp2p/go-libp2p-peerstore"
 	ma "github.com/multiformats/go-multiaddr"
@@ -183,6 +184,10 @@ func runblockchain(listenF *int, target *string, seed *int64, secio *bool, suffi
 		// Create a thread to read and write data.
 		go blockchain.WriteData(rw)
 		go blockchain.ReadData(rw)
+
+		peerID := net.Stream.Conn(s).RemotePeer()
+		log.Println("Remote peer ID:", peerID)
+		blockchain.PeerPool[string(peerID)] = rw
 
 		select {} // hang forever
 

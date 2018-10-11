@@ -1,20 +1,20 @@
 package rpc
 
 import (
-	"io"
-	"time"
-	"strconv"
-	"net/http"
 	"encoding/json"
+	"io"
+	"net/http"
+	"strconv"
+	"time"
 
 	"github.com/nil-zhang/Course/blockchain"
 
-
 	"github.com/gorilla/mux"
 
-	"github.com/nil-zhang/Course/wallet"
 	"fmt"
 	"log"
+
+	"github.com/nil-zhang/Course/wallet"
 )
 
 func makeMuxRouter() http.Handler {
@@ -36,10 +36,10 @@ func handleGetBlockchain(w http.ResponseWriter, r *http.Request) {
 }
 
 type SendTxArgs struct {
-	From     string
-	To       string
-	Value    uint64
-	Data  	 string
+	From  string
+	To    string
+	Value uint64
+	Data  string
 }
 
 func handleWriteTx(w http.ResponseWriter, r *http.Request) {
@@ -51,7 +51,7 @@ func handleWriteTx(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
-	validate := wallet.Validate_Address(m.From, m.To, m.Value,blockchain.WalletSuffix)
+	validate := wallet.Validate_Address(m.From, m.To, m.Value, blockchain.WalletSuffix)
 	if false == validate {
 		fmt.Println("Parameter verification failed")
 		respondWithJSON(w, r, http.StatusCreated, "Parameter verification failed")
@@ -84,23 +84,20 @@ func handleWriteBlock(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
-
 	address := blockchain.GenPosAddress()
 	newBlock := blockchain.GenerateBlock(blockchain.BlockchainInstance.Blocks[len(blockchain.BlockchainInstance.Blocks)-1], m.Msg, address)
 
-
 	if len(blockchain.BlockchainInstance.TxPool.AllTx) > 0 {
 		blockchain.BlockchainInstance.PackageTx(&newBlock)
-	}else {
+	} else {
 		newBlock.Accounts = blockchain.BlockchainInstance.LastBlock().Accounts
-		newBlock.Transactions = make([]blockchain.Transaction,0)
+		newBlock.Transactions = make([]blockchain.Transaction, 0)
 	}
 
 	if blockchain.IsBlockValid(newBlock, blockchain.BlockchainInstance.Blocks[len(blockchain.BlockchainInstance.Blocks)-1]) {
 		blockchain.Lock()
 		blockchain.BlockchainInstance.Blocks = append(blockchain.BlockchainInstance.Blocks, newBlock)
 		blockchain.UnLock()
-
 
 		b, err := json.MarshalIndent(blockchain.BlockchainInstance.Blocks, "", "  ")
 		if err != nil {
@@ -111,7 +108,8 @@ func handleWriteBlock(w http.ResponseWriter, r *http.Request) {
 		fmt.Printf("\x1b[32m%s\x1b[0m ", string(b))
 	}
 
-	blockchain.BlockchainInstance.WriteDate2File()
+	//blockchain.BlockchainInstance.WriteDate2File()
+	blockchain.BlockchainInstance.WriteToDb()
 	respondWithJSON(w, r, http.StatusCreated, newBlock)
 
 }
@@ -144,11 +142,10 @@ func respondWithJSON(w http.ResponseWriter, r *http.Request, code int, payload i
 	w.Write(response)
 }
 
-
 func RunHttpServer(port int) error {
 	mux := makeMuxRouter()
 	listentPort := strconv.Itoa(port)
-	fmt.Printf("\nlocal http server listening on \x1b[32m127.0.0.1:%s\x1b[0m\n\n",listentPort)
+	fmt.Printf("\nlocal http server listening on \x1b[32m127.0.0.1:%s\x1b[0m\n\n", listentPort)
 	s := &http.Server{
 		Addr:           ":" + listentPort,
 		Handler:        mux,
