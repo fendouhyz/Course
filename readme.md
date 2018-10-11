@@ -1,7 +1,7 @@
 ## Update by nil-zhang
 ### Changelog 2018.10.11
 1. Add special transaction and 'add/sub' instructions
-2. Add getpeers API to get peer list
+2. Add "getpeers" API to get peer list
 3. Broadcast transactions to peers and remove last block tx from local Txpool
 4. Add GlobalState Persistence to leveldb
 5. Add StateDB to store accounts and coinbase address
