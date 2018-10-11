@@ -1,5 +1,13 @@
 ## Update by nil-zhang
-### Changelog
+### Changelog 2018.10.11
+1. Add special transaction and 'add/sub' instructions
+2. Add getpeers API to get peer list
+3. Broadcast transactions to peers and remove last block tx from local Txpool
+4. Add GlobalState Persistence to leveldb
+5. Add StateDB to store accounts and coinbase address
+6. Add leveldb storage to store blockchain
+
+### Changelog 2018.09.29
 1. Add PoW consensus mode
 2. Add commands protocol over p2p network
 3. Add "-con" param to config consensus mode at the launching time
