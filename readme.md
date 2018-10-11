@@ -7,6 +7,18 @@
 5. Add StateDB to store accounts and coinbase address
 6. Add leveldb storage to store blockchain
 
+### Special transaction explanation
+1. "To" address is ""
+2. "Data" is the instruction to "From" Account's "state"
+
+JSON example:
+{
+    "From": "16Li5cc51j2e73KW7EbuZkkemWBqYdQWCr",
+    "To": "",
+    "Value": 100,
+    "Data": "add"
+}
+
 ### Changelog 2018.09.29
 1. Add PoW consensus mode
 2. Add commands protocol over p2p network
