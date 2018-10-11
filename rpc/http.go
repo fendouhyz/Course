@@ -23,6 +23,7 @@ func makeMuxRouter() http.Handler {
 	muxRouter.HandleFunc("/block", handleWriteBlock).Methods("POST")   // post请求： 本地产生一个块（若交易池中有交易，则打包进块），并将块信息广播到对端节点 e.g {"Msg": 123}
 	muxRouter.HandleFunc("/txpool", handleWriteTx).Methods("POST")     // post请求： 向本地交易池中放入新的交易  e.g {"From":"0x1","To":"0x2","Value":10000,"Data":"message"}
 	muxRouter.HandleFunc("/getbalance", handleBalance).Methods("POST") // 查询账户地址 { "Address":"0x12312132"}
+	muxRouter.HandleFunc("/getpeers", handlePeers).Methods("GET")      // peer list  { peer.ID Qm*GkXHrz}
 	return muxRouter
 }
 
@@ -159,4 +160,19 @@ func RunHttpServer(port int) error {
 	}
 
 	return nil
+}
+
+type peerList struct {
+	List []string `json:"peerlist"`
+}
+
+func handlePeers(w http.ResponseWriter, r *http.Request) {
+	p := peerList{}
+	p.List = make([]string, 0)
+	for peer := range blockchain.PeerPool {
+		p.List = append(p.List, peer)
+		fmt.Println(peer)
+	}
+
+	respondWithJSON(w, r, http.StatusCreated, p)
 }

@@ -355,7 +355,7 @@ func HandleStream(s net.Stream) {
 
 	peerID := net.Stream.Conn(s).RemotePeer()
 	log.Println("Remote peer ID:", peerID)
-	PeerPool[string(peerID)] = rw
+	PeerPool[fmt.Sprintln(peerID)] = rw
 	// stream 's' will stay open until you close it (or the other side closes it).
 }
 
