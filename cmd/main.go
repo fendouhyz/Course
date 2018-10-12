@@ -186,8 +186,8 @@ func runblockchain(listenF *int, target *string, seed *int64, secio *bool, suffi
 		go blockchain.ReadData(rw)
 
 		peerID := net.Stream.Conn(s).RemotePeer()
-		log.Println("Remote peer ID:", peerID)
-		blockchain.PeerPool[fmt.Sprintln(peerID)] = rw
+		log.Println("Remote peer ID:", peerID.Pretty())
+		blockchain.PeerPool[peerID.Pretty()] = rw
 
 		select {} // hang forever
 
